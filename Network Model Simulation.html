@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Formation Simulator</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:#0e0e0e;color:#d8d8cc;
+  font-family:'Courier New',monospace;font-size:13px;
+  display:flex;flex-direction:column;min-height:100vh;overflow-x:hidden;
+}
+.top-bar{
+  padding:10px 20px;background:#141414;
+  border-bottom:1px solid #252525;
+  font-size:13px;color:#888;line-height:1.6;
+}
+.top-bar .formula{color:#d8d8cc;font-size:14px;font-weight:bold;letter-spacing:0.3px}
+.layout{display:flex;flex:1;min-height:0}
+
+/* LEFT PANEL */
+.left-panel{
+  flex:0 0 520px;display:flex;flex-direction:column;
+  align-items:center;padding:14px 14px 10px;
+  background:#111;border-right:1px solid #222;
+}
+.status-badge{
+  padding:5px 18px;border-radius:16px;font-size:12px;
+  font-weight:bold;margin-bottom:12px;letter-spacing:0.5px;
+}
+.badge-stable{background:#0f2e0f;color:#4ec94e;border:1px solid #1e5e1e}
+.badge-unstable{background:#2e0f0f;color:#e05050;border:1px solid #5e1e1e}
+canvas{border:1px solid #1e1e1e;border-radius:8px;cursor:crosshair}
+.legend{display:flex;gap:18px;margin-top:9px;font-size:11px;color:#666}
+.legend-item{display:flex;align-items:center;gap:5px}
+.leg-line{width:24px;height:2px}
+.leg-unstable{background:#c86030}
+.leg-add{background:repeating-linear-gradient(90deg,#40a040 0,#40a040 4px,transparent 4px,transparent 8px);height:2px}
+.hint{margin-top:7px;font-size:11px;color:#444}
+.selected-hint{margin-top:4px;font-size:11px;color:#5090d0;min-height:16px}
+
+/* RIGHT PANEL */
+.right-panel{
+  flex:1;overflow-y:auto;padding:14px;
+  display:flex;flex-direction:column;gap:12px;
+}
+.section{
+  background:#161616;border:1px solid #222;
+  border-radius:8px;padding:13px 14px;
+}
+.sec-title{
+  font-size:13px;font-weight:bold;color:#d8d8cc;
+  margin-bottom:11px;
+}
+.param-row{
+  display:flex;align-items:center;gap:10px;margin-bottom:10px;
+}
+.param-row:last-child{margin-bottom:0}
+.param-label{flex:1;color:#909080;font-size:12px;font-family:'Courier New',monospace}
+input[type=range]{
+  flex:1.2;-webkit-appearance:none;height:4px;
+  background:#2a2a2a;border-radius:2px;outline:none;cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;
+  background:#3a7abf;border-radius:50%;cursor:pointer;
+}
+.param-val{min-width:34px;text-align:right;color:#d8d8cc;font-weight:bold}
+.eq-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px}
+.eq-card{background:#1e1e1e;border-radius:6px;padding:9px 12px}
+.eq-label{color:#706e60;font-size:11px;margin-bottom:3px}
+.eq-val{font-size:19px;font-weight:bold;color:#d8d8cc;font-family:'Courier New',monospace}
+.eq-note{font-size:11px;color:#555;margin-top:2px}
+.eq-ps{font-size:11px;color:#7a7060;margin-top:6px}
+.btn-row{display:flex;gap:8px}
+button{
+  flex:1;padding:9px 6px;background:#1c1c1c;color:#d8d8cc;
+  border:1px solid #303030;border-radius:6px;cursor:pointer;
+  font-family:'Courier New',monospace;font-size:13px;
+  transition:background .12s;
+}
+button:hover{background:#2a2a2a}
+button:active{background:#383838}
+button.running{border-color:#4ec94e;color:#4ec94e}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{color:#707060;text-align:left;padding:4px 8px;border-bottom:1px solid #222;font-weight:normal}
+td{padding:4px 8px;border-bottom:1px solid #191919}
+tr:last-child td{border-bottom:none}
+.ndot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.events-wrap{max-height:160px;overflow-y:auto}
+.ev{padding:2px 0;font-size:12px;color:#606050}
+.ev-stable{color:#4ec94e;font-weight:bold}
+.ev-add{color:#707060}
+.ev-remove{color:#a06040}
+.ev-rand{color:#6080a0}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="formula">u<sub>i</sub> = (α−c)·d<sub>i</sub> − β·Σ<sub>{j∈N<sub>i</sub>}</sub> d<sub>j</sub></div>
+  <div style="font-size:11px;margin-top:2px;color:#666">β penalises j's pre-existing degree (excluding the new link itself)</div>
+</div>
+
+<div class="layout">
+  <!-- LEFT -->
+  <div class="left-panel">
+    <div id="badge" class="status-badge badge-stable">✓ Pairwise stable</div>
+    <canvas id="canvas" width="488" height="488"></canvas>
+    <div class="legend">
+      <div class="legend-item"><div class="leg-line leg-unstable"></div><span>unstable</span></div>
+      <div class="legend-item"><div class="leg-line leg-add"></div><span>want to add</span></div>
+    </div>
+    <div class="hint">Click a node, then another node to toggle the link · Drag to reposition</div>
+    <div class="selected-hint" id="sel-hint"></div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right-panel">
+
+    <!-- Parameters -->
+    <div class="section">
+      <div class="sec-title">Parameters</div>
+      <div class="param-row">
+        <span class="param-label">α payoff per link</span>
+        <input type="range" id="s-alpha" min="0" max="10" step="0.1" value="5.5">
+        <span class="param-val" id="v-alpha">5.5</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">β neighbor-degree penalty</span>
+        <input type="range" id="s-beta" min="0.1" max="5" step="0.1" value="1.0">
+        <span class="param-val" id="v-beta">1.0</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">c link cost</span>
+        <input type="range" id="s-c" min="0" max="5" step="0.1" value="1.0">
+        <span class="param-val" id="v-c">1.0</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">n players</span>
+        <input type="range" id="s-n" min="3" max="14" step="1" value="7">
+        <span class="param-val" id="v-n">7</span>
+      </div>
+    </div>
+
+    <!-- Equilibrium -->
+    <div class="section">
+      <div class="sec-title">Equilibrium analysis</div>
+      <div class="eq-grid">
+        <div class="eq-card">
+          <div class="eq-label">θ* = (α−c)/β</div>
+          <div class="eq-val" id="e-theta">4.50</div>
+        </div>
+        <div class="eq-card">
+          <div class="eq-label">Keep threshold θ*+1</div>
+          <div class="eq-val" id="e-theta1">5.50</div>
+        </div>
+        <div class="eq-card">
+          <div class="eq-label">PS degree range</div>
+          <div class="eq-val" id="e-psdeg">5</div>
+        </div>
+        <div class="eq-card">
+          <div class="eq-label">Avg degree (now)</div>
+          <div class="eq-val" id="e-avgdeg">0.0</div>
+        </div>
+      </div>
+      <div class="eq-note">Add link to j iff d<sub>j</sub> &lt; θ* &nbsp;·&nbsp; Remove iff d<sub>j</sub> − 1 &gt; θ*</div>
+      <div class="eq-ps" id="e-ps">PS structure: empty network</div>
+    </div>
+
+    <!-- Buttons -->
+    <div class="btn-row">
+      <button id="btn-step" onclick="doStep()">Step</button>
+      <button id="btn-run"  onclick="doRun()">Run</button>
+      <button onclick="doReset()">Reset</button>
+      <button onclick="doRandom()">Random</button>
+    </div>
+
+    <!-- Node stats -->
+    <div class="section">
+      <div class="sec-title">Node stats</div>
+      <table>
+        <thead><tr>
+          <th>Node</th><th>d<sub>i</sub></th><th>Σd<sub>j</sub></th><th>u<sub>i</sub></th>
+        </tr></thead>
+        <tbody id="stats-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Events -->
+    <div class="section">
+      <div class="sec-title">Events</div>
+      <div class="events-wrap"><div id="events"></div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─── STATE ─────────────────────────────────────────────
+let P = { alpha:5.5, beta:1.0, c:1.0, n:7 };
+let nodes = [];   // {id, x, y}
+let adj   = [];   // n×n boolean
+let evLog = [];   // event log
+let selectedNode = null;
+let runTimer = null;
+
+// ─── INIT ───────────────────────────────────────────────
+function initNodes() {
+  const cx=244, cy=244, r=180, n=P.n;
+  nodes = [];
+  for (let i=0;i<n;i++){
+    const a = (2*Math.PI*i/n) - Math.PI/2;
+    nodes.push({id:i, x:cx+r*Math.cos(a), y:cy+r*Math.sin(a)});
+  }
+  adj = Array.from({length:n}, ()=>new Array(n).fill(false));
+}
+
+// ─── GRAPH HELPERS ──────────────────────────────────────
+function deg(i){
+  let d=0; for(let j=0;j<P.n;j++) if(adj[i][j]) d++;
+  return d;
+}
+function sumDj(i){
+  let s=0; for(let j=0;j<P.n;j++) if(adj[i][j]) s+=deg(j);
+  return s;
+}
+function util(i){ return (P.alpha-P.c)*deg(i) - P.beta*sumDj(i); }
+function theta(){ return (P.alpha-P.c)/P.beta; }
+
+// ─── STABILITY ──────────────────────────────────────────
+// i wants to add link to j: d_j < θ*
+// i wants to remove link to j: d_j - 1 > θ*
+function wantsAdd(i,j){ return deg(j) < theta(); }
+function wantsRemove(i,j){ return (deg(j)-1) > theta(); }
+
+function linkStatus(i,j){
+  if(adj[i][j]){
+    if(wantsRemove(i,j)||wantsRemove(j,i)) return 'unstable';
+    return 'stable';
+  } else {
+    if(wantsAdd(i,j)&&wantsAdd(j,i)) return 'want-add';
+    return 'none';
+  }
+}
+
+function nodeIssue(i){
+  for(let j=0;j<P.n;j++){
+    if(i===j) continue;
+    if(adj[i][j]&&(wantsRemove(i,j)||wantsRemove(j,i))) return true;
+    if(!adj[i][j]&&wantsAdd(i,j)&&wantsAdd(j,i)) return true;
+  }
+  return false;
+}
+
+function deviations(){
+  const devs=[];
+  for(let i=0;i<P.n;i++) for(let j=i+1;j<P.n;j++){
+    if(adj[i][j]){
+      if(wantsRemove(i,j)||wantsRemove(j,i)) devs.push({t:'remove',i,j});
+    } else {
+      if(wantsAdd(i,j)&&wantsAdd(j,i)) devs.push({t:'add',i,j});
+    }
+  }
+  return devs;
+}
+function isStable(){ return deviations().length===0; }
+
+// ─── ACTIONS ────────────────────────────────────────────
+function logEvt(msg,cls){
+  evLog.unshift({msg,cls});
+  if(evLog.length>40) evLog.pop();
+}
+
+function doStep(){
+  const devs=deviations();
+  if(!devs.length){ logEvt('✓ Stable — no improving moves','ev-stable'); redraw(); return; }
+  const d=devs[Math.floor(Math.random()*devs.length)];
+  if(d.t==='add'){ adj[d.i][d.j]=adj[d.j][d.i]=true;  logEvt(`+ Added ${d.i}-${d.j}`,'ev-add'); }
+  else           { adj[d.i][d.j]=adj[d.j][d.i]=false; logEvt(`− Removed ${d.i}-${d.j}`,'ev-remove'); }
+  if(isStable()) logEvt('✓ Stable — no improving moves','ev-stable');
+  redraw();
+}
+
+function doRun(){
+  const btn=document.getElementById('btn-run');
+  if(runTimer){ clearInterval(runTimer); runTimer=null; btn.textContent='Run'; btn.classList.remove('running'); return; }
+  btn.textContent='Stop'; btn.classList.add('running');
+  runTimer=setInterval(()=>{
+    if(isStable()){
+      clearInterval(runTimer); runTimer=null;
+      btn.textContent='Run'; btn.classList.remove('running');
+      logEvt('✓ Stable — no improving moves','ev-stable');
+      redraw(); return;
+    }
+    doStep();
+  }, 180);
+}
+
+function doReset(){
+  stopRun();
+  adj=Array.from({length:P.n},()=>new Array(P.n).fill(false));
+  selectedNode=null;
+  evLog=[];
+  redraw();
+}
+
+function doRandom(){
+  stopRun();
+  adj=Array.from({length:P.n},()=>new Array(P.n).fill(false));
+  for(let i=0;i<P.n;i++) for(let j=i+1;j<P.n;j++)
+    if(Math.random()<0.4){ adj[i][j]=adj[j][i]=true; }
+  selectedNode=null;
+  evLog=[];
+  logEvt('⚙ Random network generated','ev-rand');
+  redraw();
+}
+
+function stopRun(){
+  if(runTimer){ clearInterval(runTimer); runTimer=null; }
+  const btn=document.getElementById('btn-run');
+  btn.textContent='Run'; btn.classList.remove('running');
+}
+
+// ─── CANVAS ─────────────────────────────────────────────
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+const W=488, H=488;
+
+function nodeColor(i){
+  return nodeIssue(i) ? '#c86030' : '#2e8a5e';
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0e0e0e'; ctx.fillRect(0,0,W,H);
+
+  const n=P.n, th=theta();
+
+  // ── Draw "want-to-add" phantom edges ──
+  ctx.setLineDash([7,5]);
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){
+    if(!adj[i][j] && wantsAdd(i,j) && wantsAdd(j,i)){
+      ctx.beginPath();
+      ctx.moveTo(nodes[i].x,nodes[i].y);
+      ctx.lineTo(nodes[j].x,nodes[j].y);
+      ctx.strokeStyle='rgba(50,160,50,0.55)';
+      ctx.lineWidth=1.5; ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]);
+
+  // ── Draw existing edges ──
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){
+    if(!adj[i][j]) continue;
+    ctx.beginPath();
+    ctx.moveTo(nodes[i].x,nodes[i].y);
+    ctx.lineTo(nodes[j].x,nodes[j].y);
+    const s=linkStatus(i,j);
+    if(s==='unstable'){ ctx.strokeStyle='#c86030'; ctx.lineWidth=2.2; }
+    else              { ctx.strokeStyle='rgba(220,220,200,0.45)'; ctx.lineWidth=1.4; }
+    ctx.stroke();
+  }
+
+  // ── Draw nodes ──
+  for(let i=0;i<n;i++){
+    const nd=nodes[i], col=nodeColor(i), d=deg(i);
+    const isSel=(i===selectedNode);
+
+    // Outer glow for selected
+    if(isSel){
+      ctx.beginPath(); ctx.arc(nd.x,nd.y,26,0,Math.PI*2);
+      ctx.fillStyle='rgba(60,140,255,0.2)'; ctx.fill();
+    }
+
+    // Halo
+    ctx.beginPath(); ctx.arc(nd.x,nd.y,22,0,Math.PI*2);
+    ctx.fillStyle=col+'28'; ctx.fill();
+
+    // Main circle
+    ctx.beginPath(); ctx.arc(nd.x,nd.y,18,0,Math.PI*2);
+    ctx.fillStyle=col; ctx.fill();
+    if(isSel){
+      ctx.strokeStyle='#5090e0'; ctx.lineWidth=2.5; ctx.stroke();
+    }
+
+    // Node label
+    ctx.fillStyle='#fff';
+    ctx.font='bold 13px "Courier New",monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(i, nd.x, nd.y);
+
+    // Degree label (outside node)
+    const cx=244, cy=244;
+    const angle=Math.atan2(nd.y-cy, nd.x-cx);
+    const lx=nd.x+Math.cos(angle)*34;
+    const ly=nd.y+Math.sin(angle)*34;
+    ctx.fillStyle='#888870';
+    ctx.font='11px "Courier New",monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`d=${d}`, lx, ly);
+  }
+}
+
+// ─── UI UPDATE ──────────────────────────────────────────
+function redraw(){
+  draw();
+  updateBadge();
+  updateEquil();
+  updateStats();
+  updateEvents();
+}
+
+function updateBadge(){
+  const el=document.getElementById('badge');
+  if(isStable()){
+    el.textContent='✓ Pairwise stable';
+    el.className='status-badge badge-stable';
+  } else {
+    el.textContent='✗ Not pairwise stable';
+    el.className='status-badge badge-unstable';
+  }
+}
+
+function updateEquil(){
+  const th=theta();
+  document.getElementById('e-theta').textContent=th.toFixed(2);
+  document.getElementById('e-theta1').textContent=(th+1).toFixed(2);
+  document.getElementById('e-psdeg').textContent=Math.floor(th);
+
+  const n=P.n;
+  let edges=0;
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) if(adj[i][j]) edges++;
+  const avg=n>0?(2*edges/n):0;
+  document.getElementById('e-avgdeg').textContent=avg.toFixed(1);
+
+  // PS structure label
+  const psD=Math.floor(th);
+  let struct='';
+  if(edges===0) struct='empty network';
+  else if(edges===n*(n-1)/2) struct='complete network';
+  else struct=`${psD}-regular network`;
+  document.getElementById('e-ps').textContent='PS structure: '+struct;
+}
+
+function updateStats(){
+  const n=P.n;
+  let html='';
+  for(let i=0;i<n;i++){
+    const d=deg(i), sdj=sumDj(i), u=util(i);
+    const col=nodeColor(i);
+    const uc=u>=0?'#4ec94e':'#d07060';
+    html+=`<tr>
+      <td><span class="ndot" style="background:${col}"></span>${i}</td>
+      <td>${d}</td><td>${sdj}</td>
+      <td style="color:${uc};font-weight:bold">${u.toFixed(1)}</td>
+    </tr>`;
+  }
+  document.getElementById('stats-body').innerHTML=html;
+}
+
+function updateEvents(){
+  const el=document.getElementById('events');
+  el.innerHTML=evLog.map(e=>`<div class="ev ${e.cls}">${e.msg}</div>`).join('');
+}
+
+// ─── MOUSE INTERACTION ──────────────────────────────────
+let dragNode=null, dragOffX=0, dragOffY=0, didDrag=false;
+
+function getScale(){
+  const r=canvas.getBoundingClientRect();
+  return {sx:W/r.width, sy:H/r.height, r};
+}
+
+function nodeAt(mx,my){
+  for(let i=0;i<nodes.length;i++){
+    const dx=nodes[i].x-mx, dy=nodes[i].y-my;
+    if(dx*dx+dy*dy<24*24) return i;
+  }
+  return -1;
+}
+
+canvas.addEventListener('mousedown', e=>{
+  e.preventDefault();
+  const {sx,sy,r}=getScale();
+  const mx=(e.clientX-r.left)*sx, my=(e.clientY-r.top)*sy;
+  const ni=nodeAt(mx,my);
+  if(ni>=0){ dragNode=ni; dragOffX=mx-nodes[ni].x; dragOffY=my-nodes[ni].y; didDrag=false; }
+});
+
+canvas.addEventListener('mousemove', e=>{
+  if(dragNode===null) return;
+  const {sx,sy,r}=getScale();
+  const mx=(e.clientX-r.left)*sx, my=(e.clientY-r.top)*sy;
+  const nx=mx-dragOffX, ny=my-dragOffY;
+  if(Math.abs(nx-nodes[dragNode].x)>3||Math.abs(ny-nodes[dragNode].y)>3) didDrag=true;
+  nodes[dragNode].x=Math.max(24,Math.min(W-24,nx));
+  nodes[dragNode].y=Math.max(24,Math.min(H-24,ny));
+  draw();
+});
+
+canvas.addEventListener('mouseup', e=>{
+  if(dragNode!==null&&!didDrag){
+    // Treat as click
+    handleNodeClick(dragNode);
+  }
+  dragNode=null;
+});
+
+canvas.addEventListener('mouseleave', ()=>{ dragNode=null; });
+
+function handleNodeClick(ni){
+  if(selectedNode===null){
+    selectedNode=ni;
+    document.getElementById('sel-hint').textContent=`Node ${ni} selected — click another node`;
+  } else if(selectedNode===ni){
+    selectedNode=null;
+    document.getElementById('sel-hint').textContent='';
+  } else {
+    const a=selectedNode, b=ni;
+    selectedNode=null;
+    document.getElementById('sel-hint').textContent='';
+    adj[a][b]=adj[b][a]=!adj[a][b];
+    if(adj[a][b]) logEvt(`+ Added ${a}-${b}`,'ev-add');
+    else           logEvt(`− Removed ${a}-${b}`,'ev-remove');
+  }
+  redraw();
+}
+
+// Touch support
+canvas.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  const t=e.touches[0];
+  const {sx,sy,r}=getScale();
+  const mx=(t.clientX-r.left)*sx, my=(t.clientY-r.top)*sy;
+  const ni=nodeAt(mx,my);
+  if(ni>=0){ dragNode=ni; dragOffX=mx-nodes[ni].x; dragOffY=my-nodes[ni].y; didDrag=false; }
+},{passive:false});
+canvas.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  if(dragNode===null) return;
+  const t=e.touches[0];
+  const {sx,sy,r}=getScale();
+  const mx=(t.clientX-r.left)*sx, my=(t.clientY-r.top)*sy;
+  const nx=mx-dragOffX, ny=my-dragOffY;
+  if(Math.abs(nx-nodes[dragNode].x)>5||Math.abs(ny-nodes[dragNode].y)>5) didDrag=true;
+  nodes[dragNode].x=Math.max(24,Math.min(W-24,nx));
+  nodes[dragNode].y=Math.max(24,Math.min(H-24,ny));
+  draw();
+},{passive:false});
+canvas.addEventListener('touchend', e=>{
+  if(dragNode!==null&&!didDrag) handleNodeClick(dragNode);
+  dragNode=null;
+});
+
+// ─── SLIDERS ────────────────────────────────────────────
+function bindSlider(id,key,valId,fmt){
+  const sl=document.getElementById(id);
+  sl.addEventListener('input',()=>{
+    P[key]=parseFloat(sl.value);
+    document.getElementById(valId).textContent=fmt(P[key]);
+    if(key==='n'){
+      stopRun(); selectedNode=null;
+      initNodes(); evLog=[];
+    }
+    redraw();
+  });
+}
+bindSlider('s-alpha','alpha','v-alpha',v=>v.toFixed(1));
+bindSlider('s-beta', 'beta', 'v-beta', v=>v.toFixed(1));
+bindSlider('s-c',   'c',    'v-c',    v=>v.toFixed(1));
+bindSlider('s-n',   'n',    'v-n',    v=>v.toFixed(0));
+
+// ─── BOOT ───────────────────────────────────────────────
+initNodes();
+redraw();
+</script>
+</body>
+</html>
