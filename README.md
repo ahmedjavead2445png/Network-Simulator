@@ -1,2 +1,2 @@
 # Network-Simulator
-draws the resulting network for arbitrarily given value of parameters like number of nodes, cost and benifit of link
+draws the resulting network for an arbitrarily given value of parameters like the number of nodes, the cost, and the benefit of the link
